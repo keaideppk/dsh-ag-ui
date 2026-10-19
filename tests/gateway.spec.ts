@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { HttpAgent } from '@ag-ui/client'
 import { EventType, type BaseEvent, type RunAgentInput, type Tool } from '@ag-ui/core'
 import type { StreamChunk } from '@deepseek-ai/dsh-llm'
+import { DshHttpAgent } from '../src/client.ts'
 import { disposeMountedContexts, mountGateway, runAgentEvents } from './harness.ts'
 import { textResponse, toolCallsResponse, toolResponse } from './scripted-adapter.ts'
 import type { ToolDefinition } from '@deepseek-ai/dsh-tools'
@@ -80,6 +81,7 @@ describe('AG-UI Gateway', () => {
       EventType.TEXT_MESSAGE_START,
       EventType.TEXT_MESSAGE_CONTENT,
       EventType.TEXT_MESSAGE_END,
+      EventType.MESSAGES_SNAPSHOT,
       EventType.RUN_FINISHED,
     ])
     expect(agent.state).toEqual({
@@ -92,9 +94,8 @@ describe('AG-UI Gateway', () => {
     expect(harness.adapter.requests[0]?.messages.some(message => message.content.some(block =>
       block.type === 'text' && block.text.includes('"title":"Draft"')))).toBe(true)
     expect(harness.adapter.requests[0]?.tools.some(tool => tool.name === 'ag_ui_update_state')).toBe(true)
-    expect(harness.adapter.requests[1]?.messages.some(message => message.content.some(block =>
-      block.type === 'tool-result' && block.content.some(content =>
-        content.type === 'text' && content.text.includes('Pasta Primavera'))))).toBe(true)
+    expect(harness.adapter.requests[1]?.messages.some(message => message.role === 'tool'
+      && message.content.some(content => content.type === 'text' && content.text.includes('Pasta Primavera')))).toBe(true)
 
     const dshAgent = harness.ctx.agents.list()[0]
     expect(dshAgent).toBeDefined()
@@ -132,7 +133,7 @@ describe('AG-UI Gateway', () => {
       }),
       textResponse('Draft updated. Please review it before submitting.'),
     ])
-    const agent = new HttpAgent({ url: harness.url, headers: HEADERS, threadId: 'encounter-e001' })
+    const agent = new DshHttpAgent({ url: harness.url, headers: HEADERS, threadId: 'encounter-e001' })
     agent.addMessage({ id: 'user-1', role: 'user', content: 'Write the assessment here.' })
 
     const firstEvents: BaseEvent[] = []
@@ -152,6 +153,7 @@ describe('AG-UI Gateway', () => {
       EventType.TOOL_CALL_START,
       EventType.TOOL_CALL_ARGS,
       EventType.TOOL_CALL_END,
+      EventType.MESSAGES_SNAPSHOT,
       EventType.RUN_FINISHED,
     ])
     const dshAgent = harness.ctx.agents.list()[0]
@@ -183,6 +185,7 @@ describe('AG-UI Gateway', () => {
       EventType.TEXT_MESSAGE_START,
       EventType.TEXT_MESSAGE_CONTENT,
       EventType.TEXT_MESSAGE_END,
+      EventType.MESSAGES_SNAPSHOT,
       EventType.RUN_FINISHED,
     ])
     expect(dshAgent?.status).toBe('idle')
@@ -193,9 +196,8 @@ describe('AG-UI Gateway', () => {
     const secondRequest = harness.adapter.requests[1]
     expect(secondRequest?.messages.some(message => message.content.some(block =>
       block.type === 'text' && block.text.includes('"draftVersion":4')))).toBe(true)
-    expect(secondRequest?.messages.some(message => message.content.some(block =>
-      block.type === 'tool-result' && block.content.some(content =>
-        content.type === 'text' && content.text.includes('"version":4'))))).toBe(true)
+    expect(secondRequest?.messages.some(message => message.role === 'tool'
+      && message.content.some(content => content.type === 'text' && content.text.includes('"version":4')))).toBe(true)
   })
 
   it('parks several frontend Tools in one step and resumes in subset runs', async () => {
@@ -220,6 +222,7 @@ describe('AG-UI Gateway', () => {
       EventType.TOOL_CALL_START,
       EventType.TOOL_CALL_ARGS,
       EventType.TOOL_CALL_END,
+      EventType.MESSAGES_SNAPSHOT,
       EventType.RUN_FINISHED,
     ])
     const dshAgent = harness.ctx.agents.list()[0]
@@ -255,6 +258,7 @@ describe('AG-UI Gateway', () => {
       EventType.TEXT_MESSAGE_START,
       EventType.TEXT_MESSAGE_CONTENT,
       EventType.TEXT_MESSAGE_END,
+      EventType.MESSAGES_SNAPSHOT,
       EventType.RUN_FINISHED,
     ])
     expect(dshAgent?.status).toBe('idle')
@@ -283,6 +287,7 @@ describe('AG-UI Gateway', () => {
       EventType.TOOL_CALL_START,
       EventType.TOOL_CALL_ARGS,
       EventType.TOOL_CALL_END,
+      EventType.MESSAGES_SNAPSHOT,
       EventType.RUN_FINISHED,
     ])
 
@@ -305,6 +310,7 @@ describe('AG-UI Gateway', () => {
       EventType.TEXT_MESSAGE_START,
       EventType.TEXT_MESSAGE_CONTENT,
       EventType.TEXT_MESSAGE_END,
+      EventType.MESSAGES_SNAPSHOT,
       EventType.RUN_FINISHED,
     ])
     const dshAgent = harness.ctx.agents.list()[0]
@@ -342,9 +348,8 @@ describe('AG-UI Gateway', () => {
 
     expect(frontendCallEvents.map(event => event.type)).toContain(EventType.TOOL_CALL_END)
     expect(frontendResultEvents.some(event => event.type === EventType.TOOL_CALL_RESULT)).toBe(false)
-    expect(harness.adapter.requests.at(-1)?.messages.some(message => message.content.some(block =>
-      block.type === 'tool-result' && block.content.some(content =>
-        content.type === 'text' && content.text.includes('applied'))))).toBe(true)
+    expect(harness.adapter.requests.at(-1)?.messages.some(message => message.role === 'tool'
+      && message.content.some(content => content.type === 'text' && content.text.includes('applied')))).toBe(true)
   })
 
   it('replays a completed run idempotently and rejects a conflicting reuse', async () => {
